@@ -1,0 +1,63 @@
+# ============================================
+# CLEAN .GITIGNORE FOR GITHUB PAGES PROJECT
+# ============================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.VolumeIcon.icns
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Editors
+.vscode/
+*.swp
+*.swo
+*~
+.netrwhist
+*.sublime-workspace
+*.sublime-project
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.log
+
+# Development files
+node_modules/
+.env
+.env.local
+config.dev.js
+test.html
+debug.html
+notes.txt
+notes.md
+TODO.md
+scratch.js
+
+# Archives (usually don't belong in repo)
+*.zip
+*.tar.gz
+*.rar
+*.7z
