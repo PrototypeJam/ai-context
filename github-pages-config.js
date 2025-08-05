@@ -8,7 +8,7 @@ const CONFIG = {
     // General Settings
     general: {
         title: "My Office Simulator",
-        githubRepo: "https://github.com/yourusername/your-repo-name", // Update this!
+        githubRepo: "https://prototypejam.github.io/ai-context/", // Update this!
     },
 
     // UI Text (easily change the language or wording)
