@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Legal Context Simulator</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #000; }
+        #canvas-container { width: 100vw; height: 100vh; position: relative; }
+        #controls-panel {
+            position: absolute; top: 20px; left: 20px; background: rgba(255, 255, 255, 0.98);
+            color: #333; padding: 25px; border-radius: 16px; width: 420px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); backdrop-filter: blur(12px);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        #controls-panel h2 { text-align: center; margin: 0 0 20px 0; color: #111; font-size: 1.8em; }
+        .control-group { margin-top: 25px; }
+        .control-group h3 {
+            margin: 0 0 12px 0; font-size: 1.2em; border-bottom: 1px solid #eee;
+            padding-bottom: 10px; color: #444; font-weight: 600;
+        }
+        .button-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+        .control-group button {
+            background: #f0f0f0; border: 1px solid #ccc; padding: 10px 16px;
+            border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 15px;
+        }
+        .control-group button:hover { background: #e0e0e0; border-color: #bbb; }
+        .control-group button.active {
+            background: var(--accent-color, #D97356); color: white;
+            border-color: var(--accent-color-dark, #c85a3f);
+            font-weight: bold; transform: scale(1.05);
+        }
+        #info-panel { margin-top: 30px; padding-top: 20px; border-top: 2px solid #ddd; }
+        #privilege-status {
+            font-size: 1.4em; font-weight: bold; text-align: center;
+            padding: 14px; border-radius: 10px; margin-bottom: 15px;
+        }
+        #privilege-details { font-size: 1.05em; line-height: 1.6; color: #555; }
+        .flag-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+        .flag-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+        .flag-neutral { background-color: #e2e3e5; color: #383d41; border: 1px solid #d6d8db;}
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="controls-panel">
+        <h2 id="title"></h2>
+        <div class="control-group">
+            <h3>1. Select Alice's Role (The Actor)</h3>
+            <div id="role-toggles" class="button-grid"></div>
+        </div>
+        <div class="control-group">
+            <h3>2. Select the Interaction (The Action)</h3>
+            <div id="action-toggles" class="button-grid"></div>
+        </div>
+        <div id="info-panel">
+            <div id="privilege-status"></div>
+            <p id="privilege-details"></p>
+        </div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // === GLOBAL VARIABLES ===
+        let scene, camera, renderer;
+
+        // === STATE MANAGEMENT ===
+        let currentState = {
+            role: CONFIG.scenario.roles[0].id,
+            action: CONFIG.scenario.actions[0].id
+        };
+
+        // === INITIALIZATION ===
+        function init() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(CONFIG.theme.backgroundColor);
+            scene.fog = new THREE.Fog(CONFIG.theme.backgroundColor, 15, 40);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2.5, 12);
+            camera.lookAt(0, 1.5, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            // Floor
+            const floor = new THREE.Mesh( new THREE.PlaneGeometry(50, 50), new THREE.MeshStandardMaterial({ color: CONFIG.theme.floorColor, roughness: 0.8 }) );
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Create Scene Objects
+            createCharacters();
+            createActionVisual();
+
+            // UI
+            document.getElementById('title').textContent = CONFIG.general.title;
+            initializeControls();
+            updateScene();
+            
+            animate();
+        }
+
+        // === SCENE OBJECT CREATION ===
+        // <<< VISUAL FIX: All creation logic is now more robust and separated.
+        function createCharacters() {
+            const aliceConfig = CONFIG.scenario.actors.alice;
+            const bobConfig = CONFIG.scenario.actors.bob;
+            
+            const aliceGroup = createCharacterGroup('Alice', 0x9b59b6);
+            aliceGroup.position.set(aliceConfig.position.x, 0, aliceConfig.position.z);
+            scene.add(aliceGroup);
+
+            const bobGroup = createCharacterGroup('Bob', 0x3498db);
+            bobGroup.position.set(bobConfig.position.x, 0, bobConfig.position.z);
+            scene.add(bobGroup);
+        }
+        
+        function createCharacterGroup(name, color) {
+            const group = new THREE.Group();
+            
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 1.2, 16), new THREE.MeshStandardMaterial({ color: color, roughness: 0.7 }));
+            torso.position.y = 0.6;
+            torso.castShadow = true;
+            group.add(torso);
+            
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 32, 32), new THREE.MeshStandardMaterial({ color: 0xffe0bd, roughness: 0.6 }));
+            head.position.y = 1.55;
+            head.castShadow = true;
+            group.add(head);
+
+            const nameLabel = createTextLabel(name, 'bold 38px Arial', '#000000');
+            nameLabel.position.y = 2.4;
+            group.add(nameLabel);
+            
+            const roleLabel = createTextLabel('', '30px Arial', '#333333');
+            roleLabel.position.y = 2.0;
+            group.add(roleLabel);
+            group.userData.roleLabel = roleLabel; // Keep reference to update it
+
+            return group;
+        }
+
+        function createActionVisual() {
+            const group = new THREE.Group();
+            
+            const background = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: CONFIG.theme.accentColor, transparent: true, opacity: 0.9 }));
+            group.add(background);
+            group.userData.background = background;
+
+            const label = createTextLabel('', 'bold 36px Arial', '#FFFFFF');
+            label.position.z = 0.01;
+            group.add(label);
+            group.userData.label = label;
+            
+            group.position.set(0, 3.2, 0); // Positioned cleanly above everyone
+            scene.add(group);
+        }
+        
+        function createTextLabel(text, font, color) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            context.font = font;
+            
+            const textMetrics = context.measureText(text);
+            canvas.width = THREE.MathUtils.ceilPowerOfTwo(textMetrics.width + 64);
+            canvas.height = 128; 
+            
+            context.font = font;
+            context.fillStyle = color;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+            sprite.scale.set(canvas.width / canvas.height * 2.0, 2.0, 1.0); // Maintain aspect ratio
+            return sprite;
+        }
+
+        // === UI & STATE LOGIC ===
+        function initializeControls() {
+            const roleContainer = document.getElementById('role-toggles');
+            CONFIG.scenario.roles.forEach(role => {
+                const btn = document.createElement('button');
+                btn.textContent = role.name;
+                btn.dataset.id = role.id;
+                btn.onclick = () => { currentState.role = role.id; updateScene(); };
+                roleContainer.appendChild(btn);
+            });
+
+            const actionContainer = document.getElementById('action-toggles');
+            CONFIG.scenario.actions.forEach(action => {
+                const btn = document.createElement('button');
+                btn.textContent = action.name;
+                btn.dataset.id = action.id;
+                btn.onclick = () => { currentState.action = action.id; updateScene(); };
+                actionContainer.appendChild(btn);
+            });
+        }
+        
+        function updateScene() {
+            const currentRole = CONFIG.scenario.roles.find(r => r.id === currentState.role);
+            const currentAction = CONFIG.scenario.actions.find(a => a.id === currentState.action);
+
+            // <<< VISUAL FIX: Update labels robustly
+            const aliceRoleLabel = scene.children.find(c => c.children.some(child => child.material.map && child.material.map.image.getContext('2d').measureText('Alice').width > 0))?.userData.roleLabel;
+            const bobRoleLabel = scene.children.find(c => c.children.some(child => child.material.map && child.material.map.image.getContext('2d').measureText('Bob').width > 0))?.userData.roleLabel;
+            const actionGroup = scene.children.find(c => c.userData.background);
+
+            if (aliceRoleLabel) updateTextLabel(aliceRoleLabel, `(${currentRole.name})`);
+            if (bobRoleLabel) updateTextLabel(bobRoleLabel, `(${currentRole.bobRole})`);
+            if (actionGroup) updateTextLabel(actionGroup.userData.label, currentAction.name, true);
+            
+            // Update Active Buttons
+            document.querySelectorAll('#controls-panel button').forEach(b => {
+                const isActive = b.dataset.id === currentState.role || b.dataset.id === currentState.action;
+                b.classList.toggle('active', isActive);
+            });
+
+            // Use the implications map from config.js
+            const implicationKey = `${currentState.role}-${currentState.action}`;
+            const result = CONFIG.scenario.implications[implicationKey] || CONFIG.scenario.implications['default'];
+            
+            const statusEl = document.getElementById('privilege-status');
+            const detailsEl = document.getElementById('privilege-details');
+            
+            statusEl.textContent = result.privilege.text;
+            detailsEl.textContent = result.details;
+
+            if (result.privilege.applies === true) {
+                statusEl.className = 'privilege-status flag-success';
+            } else if (result.privilege.applies === false) {
+                statusEl.className = 'privilege-status flag-danger';
+            } else {
+                statusEl.className = 'privilege-status flag-neutral';
+            }
+        }
+        
+        function updateTextLabel(sprite, text, isAction = false) {
+            const canvas = sprite.material.map.image;
+            const context = canvas.getContext('2d');
+            const font = context.font;
+
+            const textMetrics = context.measureText(text);
+            const newWidth = THREE.MathUtils.ceilPowerOfTwo(textMetrics.width + 64);
+            
+            if (canvas.width !== newWidth) canvas.width = newWidth;
+
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.font = font;
+            context.fillStyle = sprite.material.color.getStyle();
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            sprite.material.map.needsUpdate = true;
+            
+            const newScaleX = canvas.width / canvas.height * 2.0;
+            sprite.scale.set(newScaleX, 2.0, 1.0);
+
+            if(isAction) {
+                const background = sprite.parent.userData.background;
+                background.scale.x = newScaleX * 1.05; // Make background slightly wider
+                background.scale.y = 2.2;
+            }
+        }
+
+        // === ANIMATION LOOP ===
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // === START ===
+        init();
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

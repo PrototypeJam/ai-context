@@ -5,29 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Legal Context Simulator</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #000; }
         #canvas-container { width: 100vw; height: 100vh; position: relative; }
         #controls-panel {
-            position: absolute; top: 20px; left: 20px; background: rgba(255, 255, 255, 0.95);
-            color: #333; padding: 20px; border-radius: 15px; width: 380px;
+            position: absolute; top: 20px; left: 20px; background: rgba(255, 255, 255, 0.97);
+            color: #333; padding: 20px; border-radius: 15px; width: 400px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); backdrop-filter: blur(10px);
+            border: 1px solid rgba(0,0,0,0.1);
         }
-        #controls-panel h2 { text-align: center; margin: 0 0 10px 0; }
+        #controls-panel h2 { text-align: center; margin: 0 0 20px 0; color: #111; }
         .control-group { margin-top: 20px; }
-        .control-group h3 { margin: 0 0 8px 0; font-size: 1.1em; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .control-group h3 {
+            margin: 0 0 10px 0; font-size: 1.1em; border-bottom: 1px solid #eee;
+            padding-bottom: 8px; color: #444;
+        }
         .control-group button {
-            background: #f0f0f0; border: 1px solid #ccc; padding: 8px 12px; margin: 4px;
+            background: #f0f0f0; border: 1px solid #ccc; padding: 10px 14px; margin: 4px;
             border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 14px;
         }
-        .control-group button:hover { background: #e0e0e0; }
+        .control-group button:hover { background: #e0e0e0; border-color: #bbb; }
         .control-group button.active {
-            background: var(--accent-color, #D97356); color: white; border-color: var(--accent-color-dark, #c85a3f);
+            background: var(--accent-color, #D97356); color: white;
+            border-color: var(--accent-color-dark, #c85a3f);
+            font-weight: bold;
         }
-        #info-panel { margin-top: 20px; padding-top: 15px; border-top: 2px solid #ddd; }
-        #privilege-status { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; text-align: center; padding: 10px; border-radius: 8px;}
+        #info-panel { margin-top: 25px; padding-top: 20px; border-top: 2px solid #ddd; }
+        #privilege-status {
+            font-size: 1.3em; font-weight: bold; text-align: center;
+            padding: 12px; border-radius: 8px; margin-bottom: 10px;
+        }
         #privilege-details { font-size: 1em; line-height: 1.5; color: #555; }
-        .flag-success { background-color: #d4edda; color: #155724; }
-        .flag-danger { background-color: #f8d7da; color: #721c24; }
+        .flag-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+        .flag-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+        .flag-neutral { background-color: #e2e3e5; color: #383d41; border: 1px solid #d6d8db;}
     </style>
 </head>
 <body>
@@ -58,7 +68,6 @@
         // === GLOBAL VARIABLES ===
         let scene, camera, renderer;
         let alice, bob, actionVisual;
-        const characters = {};
 
         // === STATE MANAGEMENT ===
         let currentState = {
@@ -71,29 +80,32 @@
             // Basic Scene Setup
             scene = new THREE.Scene();
             scene.background = new THREE.Color(CONFIG.theme.backgroundColor);
-            scene.fog = new THREE.Fog(CONFIG.theme.backgroundColor, 10, 50);
+            scene.fog = new THREE.Fog(CONFIG.theme.backgroundColor, 15, 40);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 2.5, 9);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2.2, 9);
             camera.lookAt(0, 1, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
             // Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
             directionalLight.position.set(5, 10, 7.5);
             directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
             scene.add(directionalLight);
 
             // Floor
             const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(40, 40),
-                new THREE.MeshStandardMaterial({ color: CONFIG.theme.floorColor })
+                new THREE.PlaneGeometry(50, 50),
+                new THREE.MeshStandardMaterial({ color: CONFIG.theme.floorColor, roughness: 0.8 })
             );
             floor.rotation.x = -Math.PI / 2;
             floor.receiveShadow = true;
@@ -118,24 +130,28 @@
             animate();
         }
 
-        // === SCENE OBJECT CREATION ===
+        // === SCENE OBJECT CREATION (WITH VISUAL IMPROVEMENTS) ===
         function createCharacter(name, config) {
             const group = new THREE.Group();
-            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 1, 16), new THREE.MeshStandardMaterial({ color: 0x5555ff }));
+            const torsoMaterial = new THREE.MeshStandardMaterial({ color: name === 'Alice' ? 0xbe7ffc : 0x619dff, roughness: 0.7 });
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 1, 16), torsoMaterial);
             torso.position.y = 0.5;
             torso.castShadow = true;
             group.add(torso);
-            const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 32), new THREE.MeshStandardMaterial({ color: 0xffdbac }));
-            head.position.y = 1.3;
+            
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 });
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 32), headMaterial);
+            head.position.y = 1.35;
             head.castShadow = true;
             group.add(head);
 
-            group.userData.nameLabel = createTextLabel(name, 'bold 24px Arial', 'black');
-            group.userData.nameLabel.position.y = 2.0;
+            // --- VISUAL IMPROVEMENT: Tuned label sizes ---
+            group.userData.nameLabel = createTextLabel(name, 'bold 26px Arial', '#000000');
+            group.userData.nameLabel.position.y = 2.1;
             group.add(group.userData.nameLabel);
 
-            group.userData.roleLabel = createTextLabel('', '20px Arial', '#333');
-            group.userData.roleLabel.position.y = 1.7;
+            group.userData.roleLabel = createTextLabel('', '22px Arial', '#444444');
+            group.userData.roleLabel.position.y = 1.8;
             group.add(group.userData.roleLabel);
             
             group.position.set(config.position.x, 0, config.position.z);
@@ -144,20 +160,37 @@
 
         function createActionVisual() {
             const group = new THREE.Group();
-            group.userData.label = createTextLabel('', 'bold 22px Arial', '#333');
-            group.position.set(0, 1.2, 0);
+            
+            // --- VISUAL IMPROVEMENT: Action has a background for readability ---
+            const backgroundMaterial = new THREE.MeshBasicMaterial({
+                color: CONFIG.theme.accentColor,
+                transparent: true,
+                opacity: 0.9
+            });
+            const backgroundMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), backgroundMaterial); // Placeholder size
+            group.add(backgroundMesh);
+            group.userData.background = backgroundMesh;
+
+            group.userData.label = createTextLabel('', 'bold 24px Arial', '#FFFFFF');
+            group.userData.label.position.z = 0.01; // Render on top of background
             group.add(group.userData.label);
+            
+            group.position.set(0, 1.25, 0);
             return group;
         }
-
-        function createTextLabel(text, font, color) {
+        
+        // Generic text label factory
+        function createTextLabel(text, font, color, noPad = false) {
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             context.font = font;
-            const width = context.measureText(text).width;
-            canvas.width = width + 20;
-            canvas.height = 40;
+            // Add padding unless disabled (for backgrounds)
+            const padding = noPad ? 0 : 20;
+            const textWidth = context.measureText(text).width;
+            canvas.width = textWidth + padding;
+            canvas.height = 50; // Increased height for better font rendering
             
+            // Re-apply font and color after potential resize
             context.font = font;
             context.fillStyle = color;
             context.textAlign = 'center';
@@ -166,7 +199,7 @@
 
             const texture = new THREE.CanvasTexture(canvas);
             const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
-            label.scale.set((canvas.width / canvas.height) * 0.8, 0.8, 1);
+            label.scale.set(canvas.width / canvas.height, 1, 1); // Scale based on aspect ratio
             return label;
         }
 
@@ -188,7 +221,7 @@
                 btn.dataset.id = action.id;
                 btn.onclick = () => { currentState.action = action.id; updateScene(); };
                 actionContainer.appendChild(btn);
-});
+            });
         }
         
         function updateScene() {
@@ -198,13 +231,13 @@
             // Update Labels
             updateTextLabel(alice.userData.roleLabel, `(${currentRole.name})`);
             updateTextLabel(bob.userData.roleLabel, `(${currentRole.bobRole})`);
-            updateTextLabel(actionVisual.userData.label, currentAction.name);
+            updateTextLabel(actionVisual.userData.label, currentAction.name, true); // Update action label
             
             // Update Active Buttons
             document.querySelectorAll('#role-toggles button').forEach(b => b.classList.toggle('active', b.dataset.id === currentState.role));
             document.querySelectorAll('#action-toggles button').forEach(b => b.classList.toggle('active', b.dataset.id === currentState.action));
 
-            // Update Info Panel using the rules engine
+            // --- REVISED LOGIC: Use the implications map from config.js ---
             const implicationKey = `${currentState.role}-${currentState.action}`;
             const result = CONFIG.scenario.implications[implicationKey] || CONFIG.scenario.implications['default'];
             
@@ -214,35 +247,64 @@
             statusEl.textContent = result.privilege.text;
             detailsEl.textContent = result.details;
 
-            statusEl.className = result.privilege.applies ? 'flag-success' : 'flag-danger';
+            // Update status panel style based on outcome
+            if (result.privilege.applies === true) {
+                statusEl.className = 'flag-success';
+            } else if (result.privilege.applies === false) {
+                statusEl.className = 'flag-danger';
+            } else {
+                statusEl.className = 'flag-neutral';
+            }
         }
-
-        function updateTextLabel(labelSprite, newText) {
+        
+        // Helper to update text on a sprite, resizing canvas if needed
+        function updateTextLabel(labelSprite, newText, isAction = false) {
             const canvas = labelSprite.material.map.image;
             const context = canvas.getContext('2d');
-            context.clearRect(0, 0, canvas.width, canvas.height);
-            context.font = context.font;
-            const newWidth = context.measureText(newText).width + 20;
+            const font = context.font;
+            const padding = isAction ? 40 : 20;
+
+            const newWidth = context.measureText(newText).width + padding;
+            // Only resize if necessary to avoid layout shifts
             if (canvas.width !== newWidth) canvas.width = newWidth;
-            
-            context.font = context.font;
-            context.fillStyle = context.fillStyle;
+
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.font = font;
+            context.fillStyle = labelSprite.material.color.getStyle();
             context.textAlign = 'center';
             context.textBaseline = 'middle';
             context.fillText(newText, canvas.width / 2, canvas.height / 2);
             labelSprite.material.map.needsUpdate = true;
-            labelSprite.scale.set((canvas.width / canvas.height) * 0.8, 0.8, 1);
+            
+            const newScale = canvas.width / canvas.height;
+            labelSprite.scale.set(newScale, 1, 1);
+            
+            // If it's the action label, also update its background
+            if (isAction) {
+                const backgroundSprite = labelSprite.parent.userData.background;
+                backgroundSprite.scale.x = newScale + 0.2; // Add a bit of padding
+                backgroundSprite.scale.y = 1.2;
+            }
         }
 
         // === ANIMATION LOOP ===
         function animate() {
             requestAnimationFrame(animate);
+            // Add subtle rotation for visual interest
+            alice.rotation.y += 0.001;
+            bob.rotation.y += 0.001;
             renderer.render(scene, camera);
         }
 
-        // === START ===
+        // === START THE SIMULATOR ===
         init();
         
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
